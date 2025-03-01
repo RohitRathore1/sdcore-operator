@@ -48,38 +48,38 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	err := r.Client.Get(ctx, req.NamespacedName, nfDeployment)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Info("UPF NFDeployment resource not found, ignoring because object must be deleted")
+			log.Info("NFDeployment resource not found. Ignoring since object must be deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Failed to get UPF NFDeployment")
+		log.Error(err, "Failed to get NFDeployment")
 		return reconcile.Result{}, err
+	}
+
+	if nfDeployment.Spec.Provider != "upf.sdcore.io" {
+		return reconcile.Result{}, nil
 	}
 
 	namespace := nfDeployment.Namespace
 
-	configMapFound := false
 	configMapName := nfDeployment.Name
-	var configMapVersion string
+	configMapVersion := ""
 	currentConfigMap := new(apiv1.ConfigMap)
+	configMapFound := false
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, currentConfigMap); err == nil {
 		configMapFound = true
 		configMapVersion = currentConfigMap.ResourceVersion
 	}
 
-	deploymentFound := false
 	deploymentName := nfDeployment.Name
 	currentDeployment := new(appsv1.Deployment)
+	deploymentFound := false
 	if err := r.Client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: namespace}, currentDeployment); err == nil {
 		deploymentFound = true
 	}
 
-	// If deployment exists, check if we need to update the status
 	if deploymentFound {
 		deployment := currentDeployment.DeepCopy()
 
-		// TODO: implement status update logic
-		
-		// If configMap was updated, we should update the deployment to trigger a rolling update
 		if currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] != configMapVersion {
 			log.Info("ConfigMap has been updated, rolling Deployment pods", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
 			currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] = configMapVersion
@@ -94,7 +94,6 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return reconcile.Result{}, nil
 	}
 
-	// Create or update configMap if needed
 	if !configMapFound {
 		configMap, err := createConfigMap(log, nfDeployment)
 		if err != nil {
@@ -110,7 +109,6 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		log.Info("Created ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "ConfigMap.Name", configMap.Name)
 	}
 
-	// Create deployment if it doesn't exist
 	if !deploymentFound {
 		deployment, err := createDeployment(log, configMapVersion, nfDeployment)
 		if err != nil {
@@ -130,7 +128,6 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		log.Info("Created Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
 	}
 
-	// Create service if needed
 	serviceName := nfDeployment.Name
 	currentService := new(apiv1.Service)
 	serviceFound := false
@@ -158,4 +155,12 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *UPFDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nephiov1alpha1.NFDeployment{}).
+		WithEventFilter(controllers.ProviderFilter("upf.sdcore.io")).
+		Complete(r)
 } 

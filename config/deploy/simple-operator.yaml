@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-operator
+  namespace: sdcore-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-operator
+  template:
+    metadata:
+      labels:
+        app: simple-operator
+    spec:
+      serviceAccountName: default
+      containers:
+      - name: operator
+        image: sdcore-operator:latest
+        imagePullPolicy: IfNotPresent
+        command: ["sleep", "infinity"]
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 60Mi

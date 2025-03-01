@@ -7,17 +7,14 @@ spec:
   provider: upf.sdcore.io
   interfaces:
     - name: n3
-      ipv4:
-        address: 192.168.252.3/24
-        gateway: 192.168.252.1
+      ipv4: 192.168.252.3/24
+      gateway: 192.168.252.1
     - name: n4
-      ipv4:
-        address: 192.168.253.3/24
-        gateway: 192.168.253.1
+      ipv4: 192.168.253.3/24
+      gateway: 192.168.253.1
     - name: n6
-      ipv4:
-        address: 192.168.250.3/24
-        gateway: 192.168.250.1
+      ipv4: 192.168.250.3/24
+      gateway: 192.168.250.1
   parameterValues:
     - name: capacity
       value: medium

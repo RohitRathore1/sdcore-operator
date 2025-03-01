@@ -32,11 +32,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/amf"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/ausf"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nef"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nrf"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nssf"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/pcf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/smf"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udm"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udr"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
@@ -146,6 +148,22 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "NEF")
+		os.Exit(1)
+	}
+
+	if err = (&amf.AMFDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "AMF")
+		os.Exit(1)
+	}
+
+	if err = (&smf.SMFDeploymentReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "SMF")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

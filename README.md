@@ -1,67 +1,119 @@
-SDCore Operator
-===============
+# SDCore Operator
 
-A Kubernetes operator for [SDCore](https://docs.sd-core.opennetworking.org/master/overview/overview.html).
+Kubernetes operator for managing 5G Core Network Functions using Nephio-based NFDeployment CRDs.
 
-Description
------------
+## Overview
 
-Manages deployments of SDCore network functions by reconciling Nephio's
-`NFDeployment` custom resources for various SDCore components such as:
-- Access and Mobility Management Function (AMF)
-- Session Management Function (SMF)
-- User Plane Function (BESS-UPF)
-- Authentication Server Function (AUSF)
-- Network Repository Function (NRF)
-- Policy Control Function (PCF)
-- Session Management Function (SMF)
-- Unified Data Management (UDM)
-- Unified Data Repository (UDR)
+The SDCore Operator manages the deployment of SDCore network functions using NFDeployment custom resources. It supports the following network functions:
 
-Getting Started
----------------
+- UPF (User Plane Function)
+- AMF (Access and Mobility Function)
+- SMF (Session Management Function)
+- NRF (Network Repository Function)
+- AUSF (Authentication Server Function)
+- NSSF (Network Slice Selection Function)
+- PCF (Policy Control Function)
+- UDM (Unified Data Management)
+- UDR (Unified Data Repository)
+- NEF (Network Exposure Function)
 
-### Deploy the CRDs
+## Prerequisites
 
-We need the Nephio API CRDs from the [api repository](https://github.com/nephio-project/api):
+- Kubernetes 1.23+
+- kubectl
+- Go 1.20+
+- Docker
 
-```sh
-TAG=main
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/workload.nephio.org_nfdeployments.yaml
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/workload.nephio.org_nfconfigs.yaml
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/ref.nephio.org_configs.yaml
+## Installation
+
+### Using Scripts
+
+The operator can be built and deployed using the provided scripts:
+
+```bash
+# Build and deploy the operator
+./scripts/build.sh
+
+# Test the operator by deploying sample network functions
+./scripts/test.sh
 ```
 
-(Replace `TAG` with a specific tagged version, e.g. `v2.0.0`)
+### Manual Installation
 
-### Run the Operator
+1. Apply the Custom Resource Definition (CRD):
 
-Multus needs to be installed on cluster with the "macvlan" CNI plugin.
-
-For testing, you can run the operator locally against the cluster:
-
-```sh
-make run
+```bash
+kubectl apply -f config/crd/bases/workload.nephio.org_nfdeployments.yaml
 ```
 
-Or you can build an image:
+2. Build and push the Docker image:
 
-```sh
-make docker-build docker-push REGISTRY=myregistry
+```bash
+docker build -t docker.io/nephio/sdcore-operator:latest .
 ```
 
-(Use your own Docker Hub registry)
+3. Deploy the operator:
 
-Then deploy it the cluster:
-
-```sh
-make deploy REGISTRY=myregistry
+```bash
+kubectl create namespace sdcore-system
+kubectl apply -f config/deploy/deployment.yaml
 ```
 
-### Deploy Test CRs
+## Usage
 
-```sh
-kubectl apply -f test/
+To deploy network functions, create NFDeployment custom resources. Examples are provided in the `test` directory.
+
+### Deploying UPF
+
+```bash
+kubectl apply -f test/upf_deployment.yaml
+```
+
+### Deploying AMF
+
+```bash
+kubectl apply -f test/amf_deployment.yaml
+```
+
+### Deploying NRF
+
+```bash
+kubectl apply -f test/nrf_deployment.yaml
+```
+
+## Known Issues
+
+1. Code generation with controller-gen may fail with nil pointer dereference. Use the provided scripts to build and deploy instead.
+2. The SetupWithManager method may be missing in some controllers. This is addressed in the script-based deployment.
+
+## Troubleshooting
+
+### Checking Operator Status
+
+```bash
+kubectl get pods -n sdcore-system
+```
+
+### Checking Network Function Deployments
+
+```bash
+kubectl get nfdeployments
+kubectl get deployments
+kubectl get pods | grep example
+```
+
+## Development
+
+### Build
+
+```bash
+go build -o bin/sdcore-operator main.go
+```
+
+### Test
+
+```bash
+go test ./... -v
 ```
 
 License

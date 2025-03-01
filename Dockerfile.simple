@@ -1,0 +1,10 @@
+FROM golang:1.20-alpine
+
+WORKDIR /app
+COPY . .
+
+# Install required tools
+RUN apk add --no-cache curl bash
+
+# Entry point
+ENTRYPOINT ["sleep", "infinity"]

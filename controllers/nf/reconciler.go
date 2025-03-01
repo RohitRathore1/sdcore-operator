@@ -19,17 +19,16 @@ package nf
 import (
 	"context"
 
-	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
+	"github.com/RohitRathore1/sdcore-operator/controllers"
 	amf "github.com/RohitRathore1/sdcore-operator/controllers/nf/amf"
-	smf "github.com/RohitRathore1/sdcore-operator/controllers/nf/smf"
-	upf "github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
-	nrf "github.com/RohitRathore1/sdcore-operator/controllers/nf/nrf"
 	ausf "github.com/RohitRathore1/sdcore-operator/controllers/nf/ausf"
+	nrf "github.com/RohitRathore1/sdcore-operator/controllers/nf/nrf"
+	pcf "github.com/RohitRathore1/sdcore-operator/controllers/nf/pcf"
+	smf "github.com/RohitRathore1/sdcore-operator/controllers/nf/smf"
 	udm "github.com/RohitRathore1/sdcore-operator/controllers/nf/udm"
 	udr "github.com/RohitRathore1/sdcore-operator/controllers/nf/udr"
-	pcf "github.com/RohitRathore1/sdcore-operator/controllers/nf/pcf"
-	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
+	upf "github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
+	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -38,19 +37,39 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// NFReconciler is a common interface for all NF reconcilers
+type NFReconciler interface {
+	reconcile.Reconciler
+	SetupWithManager(mgr ctrl.Manager) error
+}
+
+// BaseReconciler provides common functionality for all NF reconcilers
+type BaseReconciler struct {
+	client.Client
+	Scheme   *runtime.Scheme
+	Provider string
+}
+
+// SetupWithManager sets up the controller with the Manager.
+// This is a helper method that can be called by all NF reconcilers.
+func (r *BaseReconciler) SetupWithManager(mgr ctrl.Manager, provider string) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nephiov1alpha1.NFDeployment{}).
+		WithEventFilter(controllers.ProviderFilter(provider)).
+		Complete(r)
+}
+
+// Reconcile implements the reconcile.Reconciler interface.
+// This is a placeholder implementation that should be overridden by specific NF reconcilers.
+func (r *BaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// This should be overridden by specific NF reconcilers
+	return ctrl.Result{}, nil
+}
+
 // Reconciles a NFDeployment resource
 type NFDeploymentReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-}
-
-// Sets up the controller with the Manager
-func (r *NFDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(new(nephiov1alpha1.NFDeployment)).
-		Owns(new(appsv1.Deployment)).
-		Owns(new(apiv1.ConfigMap)).
-		Complete(r)
 }
 
 // +kubebuilder:rbac:groups=workload.nephio.org,resources=nfdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -141,4 +160,4 @@ func (r *NFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Info("NFDeployment NOT for sdcore", "nfDeployment.Spec.Provider", nfDeployment.Spec.Provider)
 		return reconcile.Result{}, nil
 	}
-} 
+}
