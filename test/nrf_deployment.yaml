@@ -5,8 +5,15 @@ metadata:
   namespace: default
 spec:
   provider: nrf.sdcore.io
+  interfaces:
+    - name: sbi
+      ipv4:
+        address: 172.16.60.2/24
+        gateway: 172.16.60.1
   parameterValues:
-    - name: capacity
-      value: small
-    - name: dns
-      value: 8.8.8.8 
+    - name: dbName
+      value: free5gc
+    - name: dbUrl
+      value: mongodb://mongodb:27017
+  replicas: 1
+  monitoringEnabled: true 

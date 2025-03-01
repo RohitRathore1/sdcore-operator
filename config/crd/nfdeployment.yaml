@@ -11,74 +11,72 @@ spec:
     singular: nfdeployment
   scope: Namespaced
   versions:
-  - name: v1alpha1
-    schema:
-      openAPIV3Schema:
-        description: NFDeployment is the Schema for the NFDeployments API
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: NFDeploymentSpec defines the desired state of NFDeployment
-            properties:
-              provider:
-                description: provider defines which provider implement this NFDeployment
-                type: string
-              interfaces:
-                description: interfaces defines the network interfaces for the NF deployment
-                items:
-                  properties:
-                    name:
-                      description: name of the interface
-                      type: string
-                    ipv4:
-                      description: IPv4 configuration
-                      properties:
-                        address:
-                          description: IPv4 address with CIDR
-                          type: string
-                        gateway:
-                          description: IPv4 gateway
-                          type: string
-                      type: object
-                  required:
-                  - name
-                  type: object
-                type: array
-              parameterValues:
-                description: parameterValues defines the parameters for the NF deployment
-                items:
-                  properties:
-                    name:
-                      description: name of the parameter
-                      type: string
-                    value:
-                      description: value of the parameter
-                      type: string
-                  required:
-                  - name
-                  - value
-                  type: object
-                type: array
-            required:
-            - provider
-            type: object
-          status:
-            description: NFDeploymentStatus defines the observed state of NFDeployment
-            type: object
-        type: object
-        x-kubernetes-preserve-unknown-fields: true
-    served: true
-    storage: true
-    subresources:
-      status: {} 
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+              properties:
+                provider:
+                  type: string
+                  description: Specifies the network function provider, e.g., upf.sdcore.io, amf.sdcore.io, etc.
+                interfaces:
+                  type: array
+                  description: Network interfaces configuration for the NF
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Interface name
+                      ipv4:
+                        type: object
+                        properties:
+                          address:
+                            type: string
+                            description: IPv4 address with CIDR
+                          gateway:
+                            type: string
+                            description: IPv4 gateway address
+                parameterValues:
+                  type: array
+                  description: Array of parameter key-value pairs for NF configuration
+                  items:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                        description: Parameter name
+                      value:
+                        type: string
+                        description: Parameter value
+                monitoringEnabled:
+                  type: boolean
+                  description: Whether monitoring is enabled for this NF
+                replicas:
+                  type: integer
+                  description: Number of replicas for the NF deployment
+                upstreamNFs:
+                  type: array
+                  description: List of upstream network functions that this NF depends on
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        description: The type of the upstream NF (e.g., AMF, SMF, NRF)
+                      name:
+                        type: string
+                        description: The name of the upstream NF
+                      namespace:
+                        type: string
+                        description: The namespace of the upstream NF
+          required:
+            - spec
+      subresources:
+        status: {} 

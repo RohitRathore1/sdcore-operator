@@ -6,16 +6,28 @@ metadata:
 spec:
   provider: amf.sdcore.io
   interfaces:
-    - name: n1
+    - name: n1n2
       ipv4:
-        address: 192.168.252.2/24
-        gateway: 192.168.252.1
-    - name: n2
+        address: 172.16.40.2/24
+        gateway: 172.16.40.1
+    - name: sbi
       ipv4:
-        address: 192.168.253.2/24
-        gateway: 192.168.253.1
+        address: 172.16.50.2/24
+        gateway: 172.16.50.1
   parameterValues:
-    - name: capacity
-      value: medium
-    - name: dns
-      value: 8.8.8.8 
+    - name: plmn
+      value: '{"mcc":"208","mnc":"93"}'
+    - name: supportedTacs
+      value: '["1"]'
+    - name: sst
+      value: '1'
+    - name: sd
+      value: '010203'
+    - name: dnn
+      value: 'internet'
+  replicas: 1
+  monitoringEnabled: true
+  upstreamNFs:
+    - type: NRF
+      name: example-nrf
+      namespace: default 

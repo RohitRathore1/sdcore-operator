@@ -1,82 +1,160 @@
-SDCore Operator
-===============
+# SDCore Operator
 
-A Kubernetes operator for [SDCore](https://docs.sd-core.opennetworking.org/master/overview/overview.html).
+A Kubernetes operator for managing SD-Core 5G network functions. This operator enables declarative deployment and management of 5G network functions including UPF, AMF, SMF, NRF, and more.
 
-Description
------------
+## Overview
 
-Manages deployments of SDCore network functions by reconciling Nephio's
-`NFDeployment` custom resources for various SDCore components such as:
-- Access and Mobility Management Function (AMF)
-- Session Management Function (SMF)
-- User Plane Function (BESS-UPF)
-- Authentication Server Function (AUSF)
-- Network Repository Function (NRF)
-- Policy Control Function (PCF)
-- Session Management Function (SMF)
-- Unified Data Management (UDM)
-- Unified Data Repository (UDR)
+The SDCore Operator watches for NFDeployment custom resources and creates the necessary Kubernetes resources (Deployments, ConfigMaps, Services) to run SD-Core network functions. It's designed to be lightweight and efficient, using direct Kubernetes API calls rather than complex controller-runtime abstractions.
 
-Getting Started
----------------
+## Supported Network Functions
 
-### Deploy the CRDs
+The operator supports the following SD-Core network functions:
 
-We need the Nephio API CRDs from the [api repository](https://github.com/nephio-project/api):
+- UPF (User Plane Function)
+- AMF (Access and Mobility Management Function)
+- SMF (Session Management Function)
+- NRF (Network Repository Function)
+- PCF (Policy Control Function)
+- UDM (Unified Data Management)
+- UDR (Unified Data Repository)
+- AUSF (Authentication Server Function)
+- NSSF (Network Slice Selection Function)
 
-```sh
-TAG=main
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/workload.nephio.org_nfdeployments.yaml
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/workload.nephio.org_nfconfigs.yaml
-kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/$TAG/config/crd/bases/ref.nephio.org_configs.yaml
+## Prerequisites
+
+- Kubernetes cluster (v1.20+)
+- `kubectl` command-line tool
+- Docker (for building and loading images)
+- Kind cluster (for local testing)
+
+## Installation
+
+### Using the provided script
+
+```bash
+chmod +x build-and-deploy.sh
+./build-and-deploy.sh
 ```
 
-(Replace `TAG` with a specific tagged version, e.g. `v2.0.0`)
+This script will:
+1. Build the operator Docker image
+2. Load it into your Kind cluster
+3. Apply the CRD
+4. Create the operator namespace
+5. Deploy the operator
 
-### Run the Operator
+### Manual installation
 
-Multus needs to be installed on cluster with the "macvlan" CNI plugin.
+1. Build the operator image:
+   ```bash
+   docker build -t sdcore-operator:latest -f Dockerfile.simple .
+   ```
 
-For testing, you can run the operator locally against the cluster:
+2. Load the image into your Kind cluster:
+   ```bash
+   kind load docker-image sdcore-operator:latest
+   ```
 
-```sh
-make run
+3. Apply the CRD:
+   ```bash
+   kubectl apply -f config/crd/nfdeployment.yaml
+   ```
+
+4. Create the operator namespace:
+   ```bash
+   kubectl create namespace sdcore-system
+   ```
+
+5. Deploy the operator:
+   ```bash
+   kubectl apply -f config/deployment/operator.yaml
+   ```
+
+## Usage
+
+### Create Network Function Deployments
+
+After installing the operator, you can create network function deployments using the provided sample YAML files:
+
+```bash
+# Deploy the NRF (should be deployed first as other NFs depend on it)
+kubectl apply -f test/nrf_deployment.yaml
+
+# Deploy the AMF
+kubectl apply -f test/amf_deployment.yaml
+
+# Deploy the UPF
+kubectl apply -f test/upf_deployment.yaml
 ```
 
-Or you can build an image:
+### Customizing Network Function Deployments
 
-```sh
-make docker-build docker-push REGISTRY=myregistry
+You can customize the network function deployments by editing the YAML files or creating new ones. Each NFDeployment resource supports the following fields:
+
+- `provider`: Specifies the network function provider (e.g., `upf.sdcore.io`, `amf.sdcore.io`)
+- `interfaces`: Network interfaces configuration
+- `parameterValues`: Configuration parameters for the network function
+- `replicas`: Number of replicas for the deployment
+- `monitoringEnabled`: Whether monitoring is enabled
+- `upstreamNFs`: List of upstream network functions that this NF depends on
+
+Example:
+
+```yaml
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: example-upf
+  namespace: default
+spec:
+  provider: upf.sdcore.io
+  interfaces:
+    - name: n3
+      ipv4:
+        address: 172.16.10.2/24
+        gateway: 172.16.10.1
+  parameterValues:
+    - name: capacity
+      value: small
+    - name: dns
+      value: 8.8.8.8
+  replicas: 1
+  monitoringEnabled: true
 ```
 
-(Use your own Docker Hub registry)
+## Development
 
-Then deploy it the cluster:
+### Architecture
 
-```sh
-make deploy REGISTRY=myregistry
+The operator uses a simple reconciliation loop to watch for NFDeployment resources and create the necessary Kubernetes resources. It directly uses the Kubernetes client-go libraries to interact with the API server, rather than using the more complex controller-runtime libraries.
+
+The main components are:
+- A dynamic client that watches for NFDeployment resources
+- Switch statement to handle different network function types
+- Resource creation functions for each network function
+
+### Adding a new Network Function
+
+To add support for a new network function:
+
+1. Add a new constant for the image in `simple-operator.go`
+2. Add a new case in the switch statement in the main loop
+3. Implement the processing function for the new network function
+4. Create helper functions for ConfigMap, Deployment, and Service creation
+
+### Building and Testing
+
+```bash
+# Build the operator
+go build -o sdcore-operator simple-operator.go
+
+# Run locally (for development)
+./sdcore-operator
+
+# Build the Docker image
+docker build -t sdcore-operator:latest -f Dockerfile.simple .
 ```
 
-### Deploy Test CRs
+## License
 
-```sh
-kubectl apply -f test/
-```
-
-License
--------
-
-Copyright 2024 The Nephio Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+MIT
