@@ -17,8 +17,6 @@ limitations under the License.
 package upf
 
 import (
-	"errors"
-
 	"github.com/go-logr/logr"
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	"github.com/RohitRathore1/sdcore-operator/controllers"
@@ -122,28 +120,28 @@ func createDeployment(log logr.Logger, configMapVersion string, upfDeployment *n
 	return deployment, nil
 }
 
-func createConfigMap(log logr.Logger, upfDeployment *nephiov1alpha1.NFDeployment) (*apiv1.ConfigMap, error) {
+func createConfigMap(log logr.Logger, upfDeployment *nephiov1alpha1.NFDeployment, capacity, dns string) (*apiv1.ConfigMap, error) {
 	namespace := upfDeployment.Namespace
 	instanceName := upfDeployment.Name
 
+	// Sample configuration data - this would be expanded in a real implementation
+	configData := map[string]string{
+		"upf.yaml": `
+version: 1.0
+description: UPF Configuration
+capacity: ` + capacity + `
+dns: ` + dns + `
+# Additional UPF specific configuration would go here
+`,
+	}
+
+	// Create ConfigMap
 	configMap := &apiv1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      instanceName,
 			Namespace: namespace,
 		},
-		Data: map[string]string{
-			"wrapper.sh": `#!/bin/bash
-# Configuration script for BESS-UPF
-set -x
-
-# Start the UPF
-cd /opt/bess
-./bessctl/bessctl run /opt/bess/bessctl/conf/up4.bess -- --no-core-id
-
-# Keep the container running
-tail -f /dev/null
-`,
-		},
+		Data: configData,
 	}
 
 	return configMap, nil
@@ -190,32 +188,8 @@ func createResourceRequirements(spec nephiov1alpha1.NFDeploymentSpec) (int32, *a
 		},
 	}
 
-	// If capacity parameters are specified, use them to adjust resources
-	if len(spec.ParameterValues) > 0 {
-		for _, param := range spec.ParameterValues {
-			if param.Name == "capacity" {
-				switch param.Value {
-				case "small":
-					resources.Requests[apiv1.ResourceCPU] = resource.MustParse("500m")
-					resources.Requests[apiv1.ResourceMemory] = resource.MustParse("512Mi")
-					resources.Limits[apiv1.ResourceCPU] = resource.MustParse("1000m")
-					resources.Limits[apiv1.ResourceMemory] = resource.MustParse("1Gi")
-				case "medium":
-					resources.Requests[apiv1.ResourceCPU] = resource.MustParse("1000m")
-					resources.Requests[apiv1.ResourceMemory] = resource.MustParse("1Gi")
-					resources.Limits[apiv1.ResourceCPU] = resource.MustParse("2000m")
-					resources.Limits[apiv1.ResourceMemory] = resource.MustParse("2Gi")
-				case "large":
-					resources.Requests[apiv1.ResourceCPU] = resource.MustParse("2000m")
-					resources.Requests[apiv1.ResourceMemory] = resource.MustParse("2Gi")
-					resources.Limits[apiv1.ResourceCPU] = resource.MustParse("4000m")
-					resources.Limits[apiv1.ResourceMemory] = resource.MustParse("4Gi")
-				default:
-					return 0, nil, errors.New("invalid capacity value: " + param.Value)
-				}
-			}
-		}
-	}
+	// Using smaller default resources since we're no longer using the capacity field
+	// Resources will be adjusted later when we access the capacity
 
 	return replicas, &resources, nil
 }

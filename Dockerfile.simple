@@ -1,0 +1,22 @@
+FROM golang:1.20 as builder
+
+WORKDIR /workspace
+
+# Copy the Go module files
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy the source code
+COPY simple-operator.go .
+
+# Build the operator
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o simple-operator simple-operator.go
+
+# Use a distroless base image for the final image
+FROM gcr.io/distroless/static:nonroot
+
+WORKDIR /
+COPY --from=builder /workspace/simple-operator .
+USER 65532:65532
+
+ENTRYPOINT ["/simple-operator"] 

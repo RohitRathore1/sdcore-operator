@@ -18,34 +18,10 @@ package controllers
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
-)
-
-const (
-	// ConfigMapVersionAnnotation is used to track the version of the ConfigMap
-	ConfigMapVersionAnnotation = "sdcore.nephio.org/configmap-version"
-
-	// UPFImage is the container image for UPF
-	UPFImage = "registry.opennetworking.org/sdcore/upf:latest"
-
-	// UDRImage is the container image for UDR
-	UDRImage = "registry.opennetworking.org/sdcore/udr:latest"
-
-	// PCFImage is the container image for PCF
-	PCFImage = "registry.opennetworking.org/sdcore/pcf:latest"
-
-	// UDMImage is the container image for UDM
-	UDMImage = "registry.opennetworking.org/sdcore/udm:latest"
-
-	// NRFImage is the container image for NRF
-	NRFImage = "registry.opennetworking.org/sdcore/nrf:latest"
-
-	// AUSFImage is the container image for AUSF
-	AUSFImage = "registry.opennetworking.org/sdcore/ausf:latest"
 )
 
 // ProviderFilter creates a predicate.Funcs that filters NFDeployments by provider

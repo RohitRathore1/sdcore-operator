@@ -25,11 +25,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -55,6 +57,22 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return reconcile.Result{}, err
 	}
 
+	// Get capacity value using helper
+	capacityValue, err := controllers.GetCapacitySize(nfDeployment)
+	if err != nil {
+		log.Info("Capacity parameter not found, using default small")
+		capacityValue = "small"
+	}
+	log.Info("Using capacity", "value", capacityValue)
+
+	// Get DNS value using helper
+	dnsValue, err := controllers.GetDNSIP(nfDeployment)
+	if err != nil {
+		log.Info("DNS parameter not found, using default 8.8.8.8")
+		dnsValue = "8.8.8.8"
+	}
+	log.Info("Using DNS", "value", dnsValue)
+
 	namespace := nfDeployment.Namespace
 
 	configMapFound := false
@@ -75,10 +93,10 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// If deployment exists, check if we need to update the status
 	if deploymentFound {
-		deployment := currentDeployment.DeepCopy()
+		// This variable is just a placeholder for future implementation
+		// TODO: implement status update logic using the deep copy
+		// deployment := currentDeployment.DeepCopy()
 
-		// TODO: implement status update logic
-		
 		// If configMap was updated, we should update the deployment to trigger a rolling update
 		if currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] != configMapVersion {
 			log.Info("ConfigMap has been updated, rolling Deployment pods", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
@@ -96,7 +114,7 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Create or update configMap if needed
 	if !configMapFound {
-		configMap, err := createConfigMap(log, nfDeployment)
+		configMap, err := createConfigMap(log, nfDeployment, capacityValue, dnsValue)
 		if err != nil {
 			log.Error(err, "Failed to create ConfigMap")
 			return reconcile.Result{}, err
@@ -112,10 +130,35 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// Create deployment if it doesn't exist
 	if !deploymentFound {
+		// Create the deployment
 		deployment, err := createDeployment(log, configMapVersion, nfDeployment)
 		if err != nil {
 			log.Error(err, "Failed to create Deployment")
 			return reconcile.Result{}, err
+		}
+
+		// Update resource requirements based on capacity
+		if deployment.Spec.Template.Spec.Containers != nil && len(deployment.Spec.Template.Spec.Containers) > 0 {
+			mainContainer := &deployment.Spec.Template.Spec.Containers[0]
+			
+			// Set resources based on capacity value
+			switch capacityValue {
+			case "medium":
+				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("1000m")
+				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("1Gi")
+				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("2000m")
+				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("2Gi")
+			case "large":
+				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("2000m")
+				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("2Gi")
+				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("4000m")
+				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("4Gi")
+			default: // small or any other value
+				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("500m")
+				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("512Mi")
+				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("1000m")
+				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("1Gi")
+			}
 		}
 
 		if err := ctrl.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
@@ -158,4 +201,12 @@ func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager and optional predicates.
+func (r *UPFDeploymentReconciler) SetupWithManager(mgr ctrl.Manager, predicates ...predicate.Predicate) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nephiov1alpha1.NFDeployment{}).
+		WithEventFilter(predicate.And(predicates...)).
+		Complete(r)
 } 

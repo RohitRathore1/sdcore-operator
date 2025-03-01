@@ -1,0 +1,19 @@
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"workload.nephio.org/v1alpha1","kind":"NFDeployment","metadata":{"annotations":{},"name":"example-udr","namespace":"default"},"spec":{"parameterValues":[{"name":"capacity","value":"small"},{"name":"dns","value":"8.8.8.8"}],"provider":"udr.sdcore.io"}}
+  creationTimestamp: "2025-03-01T18:39:47Z"
+  generation: 1
+  name: example-udr
+  namespace: default
+  resourceVersion: "37081524"
+  uid: 11b5b335-84db-4558-8eef-f52933bf93ee
+spec:
+  parameterValues:
+  - name: capacity
+    value: small
+  - name: dns
+    value: 8.8.8.8
+  provider: udr.sdcore.io

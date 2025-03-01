@@ -1,0 +1,84 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: nfdeployments.workload.nephio.org
+spec:
+  group: workload.nephio.org
+  names:
+    kind: NFDeployment
+    listKind: NFDeploymentList
+    plural: nfdeployments
+    singular: nfdeployment
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: NFDeployment is the Schema for the NFDeployments API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: NFDeploymentSpec defines the desired state of NFDeployment
+            properties:
+              provider:
+                description: provider defines which provider implement this NFDeployment
+                type: string
+              interfaces:
+                description: interfaces defines the network interfaces for the NF deployment
+                items:
+                  properties:
+                    name:
+                      description: name of the interface
+                      type: string
+                    ipv4:
+                      description: IPv4 configuration
+                      properties:
+                        address:
+                          description: IPv4 address with CIDR
+                          type: string
+                        gateway:
+                          description: IPv4 gateway
+                          type: string
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              parameterValues:
+                description: parameterValues defines the parameters for the NF deployment
+                items:
+                  properties:
+                    name:
+                      description: name of the parameter
+                      type: string
+                    value:
+                      description: value of the parameter
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                type: array
+            required:
+            - provider
+            type: object
+          status:
+            description: NFDeploymentStatus defines the observed state of NFDeployment
+            type: object
+        type: object
+        x-kubernetes-preserve-unknown-fields: true
+    served: true
+    storage: true
+    subresources:
+      status: {} 

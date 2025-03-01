@@ -25,20 +25,14 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/ausf"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nef"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nrf"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nssf"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/pcf"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udm"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udr"
+	"github.com/RohitRathore1/sdcore-operator/controllers"
 	"github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
 	//+kubebuilder:scaffold:imports
 )
@@ -50,7 +44,15 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(nephiov1alpha1.AddToScheme(scheme))
+
+	// Register the NFDeployment type with the scheme
+	gvk := schema.GroupVersionKind{
+		Group:   "workload.nephio.org",
+		Version: "v1alpha1",
+		Kind:    "NFDeployment",
+	}
+	scheme.AddKnownTypeWithName(gvk, &runtime.Unknown{})
+
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -77,22 +79,35 @@ func main() {
 		Port:                   9443,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "sdcore-operator.nephio.org",
+		LeaderElectionID:       "e9c2d3c0.nephio.org",
+		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
+		// when the Manager ends. This requires the binary to immediately end when the
+		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
+		// speeds up voluntary leader transitions as the new leader don't have to wait
+		// LeaseDuration time first.
+		//
+		// In the default scaffold provided, the program ends immediately after
+		// the manager stops, so would be fine to enable this option. However,
+		// if you are doing or is intended to do any operation such as perform cleanups
+		// after the manager stops then its usage might be unsafe.
+		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
-	// Register all the NF controllers
+	// Register only the UPF controller for now
 	if err = (&upf.UPFDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(mgr, controllers.ProviderFilter("upf.sdcore.io")); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "UPF")
 		os.Exit(1)
 	}
 
+	// Comment out other controllers
+	/*
 	if err = (&nrf.NRFDeploymentReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -148,6 +163,7 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "NEF")
 		os.Exit(1)
 	}
+	*/
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
