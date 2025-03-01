@@ -32,14 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
-	"github.com/nephio-project/sdcore/controllers/nf/ausf"
-	"github.com/nephio-project/sdcore/controllers/nf/nef"
-	"github.com/nephio-project/sdcore/controllers/nf/nrf"
-	"github.com/nephio-project/sdcore/controllers/nf/nssf"
-	"github.com/nephio-project/sdcore/controllers/nf/pcf"
-	"github.com/nephio-project/sdcore/controllers/nf/udm"
-	"github.com/nephio-project/sdcore/controllers/nf/udr"
-	"github.com/nephio-project/sdcore/controllers/nf/upf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/ausf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nef"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nrf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/nssf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/pcf"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udm"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/udr"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
 	//+kubebuilder:scaffold:imports
 )
 
