@@ -1,0 +1,12 @@
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: example-nrf
+  namespace: default
+spec:
+  provider: nrf.sdcore.io
+  parameterValues:
+    - name: capacity
+      value: small
+    - name: dns
+      value: 8.8.8.8 

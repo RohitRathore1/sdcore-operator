@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdcore-operator
+  namespace: sdcore-system
+  labels:
+    app.kubernetes.io/name: sdcore-operator
+    app.kubernetes.io/instance: sdcore-operator
+    app.kubernetes.io/part-of: sdcore-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: sdcore-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sdcore-operator
+      app.kubernetes.io/instance: sdcore-operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sdcore-operator
+        app.kubernetes.io/instance: sdcore-operator
+    spec:
+      serviceAccountName: sdcore-operator
+      containers:
+      - name: manager
+        image: sdcore-operator:latest
+        imagePullPolicy: IfNotPresent
+        command:
+        - /manager
+        args:
+        - --leader-elect
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      securityContext:
+        runAsNonRoot: true
+      terminationGracePeriodSeconds: 10 
