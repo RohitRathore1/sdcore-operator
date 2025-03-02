@@ -49,4 +49,52 @@ func filterObj(obj runtime.Object, provider string) bool {
 		return false
 	}
 	return nfDeployment.Spec.Provider == provider
-} 
+}
+
+// Container Registry for SD-Core components
+const (
+	// Container Registry for SD-Core images
+	ImageRegistry = "omecproject"
+
+	// Container image tags for SD-Core components
+	InitImageTag       = "rel-1.1.2"
+	AMFImageTag        = "rel-1.6.4"
+	NRFImageTag        = "rel-1.6.3"
+	SMFImageTag        = "rel-2.0.3"
+	AUSFImageTag       = "rel-1.6.2"
+	NSSFImageTag       = "rel-1.6.2"
+	PCFImageTag        = "rel-1.6.2"
+	UDRImageTag        = "rel-1.6.3"
+	UDMImageTag        = "rel-1.6.2"
+	WebUIImageTag      = "rel-1.8.3"
+	SCTPLBImageTag     = "rel-1.6.1"
+	MetricFuncImageTag = "rel-1.6.1"
+	UPFAdapterImageTag = "rel-2.0.2"
+	UPFImageTag        = "rel-1.0.0" // Placeholder for UPF
+
+	// Container image names for SD-Core components
+	InitImage       = ImageRegistry + "/pod-init:" + InitImageTag
+	AMFImage        = ImageRegistry + "/5gc-amf:" + AMFImageTag
+	NRFImage        = ImageRegistry + "/5gc-nrf:" + NRFImageTag
+	SMFImage        = ImageRegistry + "/5gc-smf:" + SMFImageTag
+	AUSFImage       = ImageRegistry + "/5gc-ausf:" + AUSFImageTag
+	NSSFImage       = ImageRegistry + "/5gc-nssf:" + NSSFImageTag
+	PCFImage        = ImageRegistry + "/5gc-pcf:" + PCFImageTag
+	UDRImage        = ImageRegistry + "/5gc-udr:" + UDRImageTag
+	UDMImage        = ImageRegistry + "/5gc-udm:" + UDMImageTag
+	WebUIImage      = ImageRegistry + "/5gc-webui:" + WebUIImageTag
+	SCTPLBImage     = ImageRegistry + "/sctplb:" + SCTPLBImageTag
+	MetricFuncImage = ImageRegistry + "/metricfunc:" + MetricFuncImageTag
+	UPFAdapterImage = ImageRegistry + "/upfadapter:" + UPFAdapterImageTag
+
+	// Provider names for Network Functions
+	AMFProvider  = "amf.sdcore.io"
+	NRFProvider  = "nrf.sdcore.io"
+	SMFProvider  = "smf.sdcore.io"
+	UPFProvider  = "upf.sdcore.io"
+	AUSFProvider = "ausf.sdcore.io"
+	NSSFProvider = "nssf.sdcore.io"
+	PCFProvider  = "pcf.sdcore.io"
+	UDRProvider  = "udr.sdcore.io"
+	UDMProvider  = "udm.sdcore.io"
+) 

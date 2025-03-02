@@ -20,11 +20,12 @@ import (
 	"context"
 	"time"
 
-	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	"github.com/RohitRathore1/sdcore-operator/controllers"
+	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,14 +76,12 @@ func (r *NRFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	// If deployment exists, check if we need to update the status
 	if deploymentFound {
-		deployment := currentDeployment.DeepCopy()
-
 		// TODO: implement status update logic
-		
+
 		// If configMap was updated, we should update the deployment to trigger a rolling update
-		if currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] != configMapVersion {
+		if currentDeployment.Spec.Template.Annotations[ConfigMapVersionAnnotation] != configMapVersion {
 			log.Info("ConfigMap has been updated, rolling Deployment pods", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
-			currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] = configMapVersion
+			currentDeployment.Spec.Template.Annotations[ConfigMapVersionAnnotation] = configMapVersion
 
 			if err := r.Update(ctx, currentDeployment); err != nil {
 				log.Error(err, "Failed to update Deployment", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
@@ -158,4 +157,12 @@ func (r *NRFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *NRFDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nephiov1alpha1.NFDeployment{}).
+		WithEventFilter(controllers.ProviderFilter(controllers.NRFProvider)).
+		Complete(r)
 } 

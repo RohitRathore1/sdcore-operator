@@ -13,6 +13,7 @@ REGISTRY=""
 TEST=false
 SKIP_CODE_GEN=true
 SIMPLE_BUILD=true  # New option for simple build
+DEPLOY_NRF=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       SIMPLE_BUILD=false
       shift
       ;;
+    --nrf)
+      DEPLOY_NRF=true
+      shift
+      ;;
     --help)
       echo "Usage: $0 [options]"
       echo "Options:"
@@ -63,6 +68,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --test            Deploy test network functions after deploying the operator"
       echo "  --no-skip-code-gen Don't skip the code generation step (may cause errors)"
       echo "  --full-build      Use full build instead of simplified build"
+      echo "  --nrf             Deploy only the NRF test resource (requires --test)"
       echo "  --help            Show this help message"
       exit 0
       ;;
@@ -703,9 +709,21 @@ if [ "$ACTION" = "deploy" ]; then
   # Deploy test network functions if requested
   if [ "$TEST" = true ]; then
     echo "Deploying test network functions..."
-    kubectl apply -f test/upf_deployment.yaml
-    kubectl apply -f test/nrf_deployment.yaml
-    kubectl apply -f test/amf_deployment.yaml
+    if [ "$DEPLOY_NRF" = true ]; then
+      echo "Deploying only NRF test resource..."
+      kubectl apply -f test/nrf_deployment.yaml
+    else
+      kubectl apply -f test/upf_deployment.yaml
+      kubectl apply -f test/amf_deployment.yaml
+      kubectl apply -f test/smf_deployment.yaml
+      kubectl apply -f test/nrf_deployment.yaml
+      kubectl apply -f test/ausf_deployment.yaml
+      kubectl apply -f test/nssf_deployment.yaml
+      kubectl apply -f test/pcf_deployment.yaml
+      kubectl apply -f test/udr_deployment.yaml
+      kubectl apply -f test/udm_deployment.yaml
+      kubectl apply -f test/nef_deployment.yaml
+    fi
     
     echo "Waiting for network functions to be deployed..."
     sleep 10
