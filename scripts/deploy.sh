@@ -94,17 +94,26 @@ if [ "$BUILD" = true ] && [ "$ACTION" = "deploy" ]; then
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	nephiodeployv1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
@@ -118,6 +127,395 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(nephiodeployv1alpha1.AddToScheme(scheme))
+}
+
+// SimpleReconciler reconciles NFDeployment objects
+type SimpleReconciler struct {
+	client.Client
+	Scheme *runtime.Scheme
+}
+
+// Reconcile is part of the main kubernetes reconciliation loop
+func (r *SimpleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	logger.Info("Reconciling NFDeployment", "name", req.Name, "namespace", req.Namespace)
+
+	// Fetch the NFDeployment instance
+	nfDeployment := &nephiodeployv1alpha1.NFDeployment{}
+	err := r.Get(ctx, req.NamespacedName, nfDeployment)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// NFDeployment was deleted, nothing to do
+			return ctrl.Result{}, nil
+		}
+		logger.Error(err, "Unable to fetch NFDeployment")
+		return ctrl.Result{}, err
+	}
+
+	// Process based on the NF type (provider)
+	switch nfDeployment.Spec.Provider {
+	case "upf.sdcore.io":
+		return r.reconcileUPF(ctx, nfDeployment)
+	case "amf.sdcore.io":
+		return r.reconcileAMF(ctx, nfDeployment)
+	case "smf.sdcore.io":
+		return r.reconcileSMF(ctx, nfDeployment)
+	case "nrf.sdcore.io":
+		return r.reconcileNRF(ctx, nfDeployment)
+	default:
+		logger.Info("Unsupported NF type", "provider", nfDeployment.Spec.Provider)
+		return ctrl.Result{}, nil
+	}
+}
+
+func (r *SimpleReconciler) reconcileUPF(ctx context.Context, nfDeployment *nephiodeployv1alpha1.NFDeployment) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("NF", "UPF")
+	
+	// Create a simple deployment for UPF
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nfDeployment.Name,
+			Namespace: nfDeployment.Namespace,
+		},
+	}
+
+	// Check if deployment exists, create if it doesn't
+	err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err != nil && errors.IsNotFound(err) {
+		// Define new deployment
+		deployment = &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nfDeployment.Name,
+				Namespace: nfDeployment.Namespace,
+				Labels: map[string]string{
+					"app":     "upf",
+					"nephio":  "true",
+					"sdcore":  "true",
+					"nf-name": nfDeployment.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app":     "upf",
+						"nf-name": nfDeployment.Name,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app":     "upf",
+							"nephio":  "true",
+							"sdcore":  "true",
+							"nf-name": nfDeployment.Name,
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "upf",
+								Image: "gcr.io/rt-hub-0015/free5gc-upf:0.0.1",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "pfcp",
+										ContainerPort: 8805,
+										Protocol:      corev1.ProtocolUDP,
+									},
+								},
+								SecurityContext: &corev1.SecurityContext{
+									Capabilities: &corev1.Capabilities{
+										Add: []corev1.Capability{"NET_ADMIN"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Set NFDeployment as the owner of the Deployment
+		if err := controllerutil.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set controller reference for UPF deployment")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Creating UPF Deployment", "Deployment.Name", deployment.Name)
+		if err = r.Create(ctx, deployment); err != nil {
+			logger.Error(err, "Failed to create UPF Deployment")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get UPF Deployment")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("UPF Deployment exists", "Deployment.Name", deployment.Name)
+	return ctrl.Result{}, nil
+}
+
+func (r *SimpleReconciler) reconcileAMF(ctx context.Context, nfDeployment *nephiodeployv1alpha1.NFDeployment) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("NF", "AMF")
+	
+	// Create a simple deployment for AMF
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nfDeployment.Name,
+			Namespace: nfDeployment.Namespace,
+		},
+	}
+
+	// Check if deployment exists, create if it doesn't
+	err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err != nil && errors.IsNotFound(err) {
+		// Define new deployment
+		deployment = &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nfDeployment.Name,
+				Namespace: nfDeployment.Namespace,
+				Labels: map[string]string{
+					"app":     "amf",
+					"nephio":  "true",
+					"sdcore":  "true",
+					"nf-name": nfDeployment.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app":     "amf",
+						"nf-name": nfDeployment.Name,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app":     "amf",
+							"nephio":  "true",
+							"sdcore":  "true",
+							"nf-name": nfDeployment.Name,
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "amf",
+								Image: "gcr.io/rt-hub-0015/free5gc-amf:0.0.1",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 80,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Set NFDeployment as the owner of the Deployment
+		if err := controllerutil.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set controller reference for AMF deployment")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Creating AMF Deployment", "Deployment.Name", deployment.Name)
+		if err = r.Create(ctx, deployment); err != nil {
+			logger.Error(err, "Failed to create AMF Deployment")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get AMF Deployment")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("AMF Deployment exists", "Deployment.Name", deployment.Name)
+	return ctrl.Result{}, nil
+}
+
+func (r *SimpleReconciler) reconcileSMF(ctx context.Context, nfDeployment *nephiodeployv1alpha1.NFDeployment) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("NF", "SMF")
+	
+	// Create a simple deployment for SMF
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nfDeployment.Name,
+			Namespace: nfDeployment.Namespace,
+		},
+	}
+
+	// Check if deployment exists, create if it doesn't
+	err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err != nil && errors.IsNotFound(err) {
+		// Define new deployment
+		deployment = &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nfDeployment.Name,
+				Namespace: nfDeployment.Namespace,
+				Labels: map[string]string{
+					"app":     "smf",
+					"nephio":  "true",
+					"sdcore":  "true",
+					"nf-name": nfDeployment.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app":     "smf",
+						"nf-name": nfDeployment.Name,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app":     "smf",
+							"nephio":  "true",
+							"sdcore":  "true",
+							"nf-name": nfDeployment.Name,
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "smf",
+								Image: "gcr.io/rt-hub-0015/free5gc-smf:0.0.1",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 80,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Set NFDeployment as the owner of the Deployment
+		if err := controllerutil.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set controller reference for SMF deployment")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Creating SMF Deployment", "Deployment.Name", deployment.Name)
+		if err = r.Create(ctx, deployment); err != nil {
+			logger.Error(err, "Failed to create SMF Deployment")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get SMF Deployment")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("SMF Deployment exists", "Deployment.Name", deployment.Name)
+	return ctrl.Result{}, nil
+}
+
+func (r *SimpleReconciler) reconcileNRF(ctx context.Context, nfDeployment *nephiodeployv1alpha1.NFDeployment) (ctrl.Result, error) {
+	logger := log.FromContext(ctx).WithValues("NF", "NRF")
+	
+	// Create a simple deployment for NRF
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nfDeployment.Name,
+			Namespace: nfDeployment.Namespace,
+		},
+	}
+
+	// Check if deployment exists, create if it doesn't
+	err := r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, deployment)
+	if err != nil && errors.IsNotFound(err) {
+		// Define new deployment
+		deployment = &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      nfDeployment.Name,
+				Namespace: nfDeployment.Namespace,
+				Labels: map[string]string{
+					"app":     "nrf",
+					"nephio":  "true",
+					"sdcore":  "true",
+					"nf-name": nfDeployment.Name,
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: int32Ptr(1),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app":     "nrf",
+						"nf-name": nfDeployment.Name,
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app":     "nrf",
+							"nephio":  "true",
+							"sdcore":  "true",
+							"nf-name": nfDeployment.Name,
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "nrf",
+								Image: "gcr.io/rt-hub-0015/free5gc-nrf:0.0.1",
+								Ports: []corev1.ContainerPort{
+									{
+										Name:          "http",
+										ContainerPort: 80,
+										Protocol:      corev1.ProtocolTCP,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Set NFDeployment as the owner of the Deployment
+		if err := controllerutil.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
+			logger.Error(err, "Failed to set controller reference for NRF deployment")
+			return ctrl.Result{}, err
+		}
+
+		logger.Info("Creating NRF Deployment", "Deployment.Name", deployment.Name)
+		if err = r.Create(ctx, deployment); err != nil {
+			logger.Error(err, "Failed to create NRF Deployment")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get NRF Deployment")
+		return ctrl.Result{}, err
+	}
+
+	logger.Info("NRF Deployment exists", "Deployment.Name", deployment.Name)
+	return ctrl.Result{}, nil
+}
+
+// Helper function to create int32 pointer from int32
+func int32Ptr(i int32) *int32 {
+	return &i
+}
+
+// SetupWithManager sets up the controller with the Manager.
+func (r *SimpleReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&nephiodeployv1alpha1.NFDeployment{}).
+		Owns(&appsv1.Deployment{}).
+		Complete(r)
 }
 
 func main() {
@@ -152,7 +550,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("Running simplified SDCore operator (watch-only mode)")
+	// Create and register the reconciler
+	reconciler := &SimpleReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}
+	
+	if err = reconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NFDeployment")
+		os.Exit(1)
+	}
+
+	setupLog.Info("Starting enhanced SDCore operator with basic NFDeployment handling")
 
 	// Setup health checks
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
