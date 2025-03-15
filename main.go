@@ -24,160 +24,97 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
+	refv1alpha1 "github.com/nephio-project/api/references/v1alpha1"
+	"github.com/RohitRathore1/sdcore-operator/controllers/nf"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	ctrl "sigs.k8s.io/controller-runtime"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/RohitRathore1/sdcore-operator/controllers"
-	"github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
+	runscheme "sigs.k8s.io/controller-runtime/pkg/scheme"
 	//+kubebuilder:scaffold:imports
 )
 
 var (
 	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
+	setupLog = controllerruntime.Log.WithName("setup")
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	// Register the NFDeployment type with the scheme
-	gvk := schema.GroupVersionKind{
-		Group:   "workload.nephio.org",
-		Version: "v1alpha1",
-		Kind:    "NFDeployment",
-	}
-	scheme.AddKnownTypeWithName(gvk, &runtime.Unknown{})
-
 	//+kubebuilder:scaffold:scheme
 }
 
 func main() {
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+	var metricsAddress string
+	var healthProbeAddress string
+	var leaderElect bool
+
+	flag.StringVar(&metricsAddress, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
+	flag.StringVar(&healthProbeAddress, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.BoolVar(&leaderElect, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	opts := zap.Options{
+
+	zapOptions := zap.Options{
 		Development: true,
 	}
-	opts.BindFlags(flag.CommandLine)
+	zapOptions.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	controllerruntime.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	manager, err := controllerruntime.NewManager(controllerruntime.GetConfigOrDie(), controllerruntime.Options{
 		Scheme:                 scheme,
-		MetricsBindAddress:     metricsAddr,
+		MetricsBindAddress:     metricsAddress,
 		Port:                   9443,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "e9c2d3c0.nephio.org",
-		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
-		// when the Manager ends. This requires the binary to immediately end when the
-		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly
-		// speeds up voluntary leader transitions as the new leader don't have to wait
-		// LeaseDuration time first.
-		//
-		// In the default scaffold provided, the program ends immediately after
-		// the manager stops, so would be fine to enable this option. However,
-		// if you are doing or is intended to do any operation such as perform cleanups
-		// after the manager stops then its usage might be unsafe.
-		// LeaderElectionReleaseOnCancel: true,
+		HealthProbeBindAddress: healthProbeAddress,
+		LeaderElection:         leaderElect,
+		LeaderElectionID:       "5089c67f.nephio.org",
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		fail(err, "unable to start manager")
+	}
+
+	schemeBuilder := &runscheme.Builder{GroupVersion: nephiov1alpha1.GroupVersion}
+
+	schemeBuilder.Register(&nephiov1alpha1.NFDeployment{}, &nephiov1alpha1.NFDeploymentList{})
+	if err := schemeBuilder.AddToScheme(manager.GetScheme()); err != nil {
+		fail(err, "Not able to register NFDeployment kind")
+	}
+
+	schemeBuilder = &runscheme.Builder{GroupVersion: refv1alpha1.GroupVersion}
+	schemeBuilder.Register(&refv1alpha1.Config{}, &refv1alpha1.ConfigList{})
+	if err := schemeBuilder.AddToScheme(manager.GetScheme()); err != nil {
+		fail(err, "Not able to register Config.ref kind")
+	}
+
+	if err = (&nf.NFDeploymentReconciler{
+		Client: manager.GetClient(),
+		Scheme: manager.GetScheme(),
+	}).SetupWithManager(manager); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NFDeployment")
 		os.Exit(1)
 	}
 
-	// Register only the UPF controller for now
-	if err = (&upf.UPFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, controllers.ProviderFilter("upf.sdcore.io")); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "UPF")
-		os.Exit(1)
-	}
-
-	// Comment out other controllers
-	/*
-	if err = (&nrf.NRFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NRF")
-		os.Exit(1)
-	}
-
-	if err = (&ausf.AUSFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "AUSF")
-		os.Exit(1)
-	}
-
-	if err = (&pcf.PCFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PCF")
-		os.Exit(1)
-	}
-
-	if err = (&udm.UDMDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "UDM")
-		os.Exit(1)
-	}
-
-	if err = (&udr.UDRDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "UDR")
-		os.Exit(1)
-	}
-
-	if err = (&nssf.NSSFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NSSF")
-		os.Exit(1)
-	}
-
-	if err = (&nef.NEFDeploymentReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "NEF")
-		os.Exit(1)
-	}
-	*/
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
+	if err := manager.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		fail(err, "unable to set up health check")
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
+	if err := manager.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		fail(err, "unable to set up ready check")
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
+	if err := manager.Start(controllerruntime.SetupSignalHandler()); err != nil {
+		fail(err, "problem running manager")
 	}
+}
+
+func fail(err error, msg string, keysAndValues ...any) {
+	setupLog.Error(err, msg, keysAndValues...)
+	os.Exit(1)
 }
