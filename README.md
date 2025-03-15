@@ -1,6 +1,6 @@
 # SDCore Operator
 
-A Kubernetes operator for bess-upf based on the Nephio NFDeployment API.
+A Kubernetes operator for SDCore network functions based on the Nephio NFDeployment API.
 
 ## Description
 
@@ -13,6 +13,9 @@ Currently supports:
 - UPF (User Plane Function) with `provider: upf.sdcore.io`
   - Based on BESS-UPF implementation from the sdcore-helm-charts
   - Multi-container architecture with BESS dataplane and PFCP control plane
+- SMF (Session Management Function) with `provider: sdcore`
+  - Based on Free5GC SMF implementation
+  - Handles session management and communicates with UPF via PFCP
 
 ## Getting Started
 
@@ -52,12 +55,16 @@ make run
 
 This will run the operator on your local machine, connecting to the cluster configured in your current kubeconfig.
 
-#### 4. Deploy a Test UPF
+#### 4. Deploy a Test UPF or SMF
 
-Apply the example UPF NFDeployment:
+Apply the example UPF or SMF NFDeployment:
 
 ```sh
+# To deploy a UPF
 kubectl apply -f test/upf.yaml
+
+# To deploy an SMF
+kubectl apply -f test/smf.yaml
 ```
 
 #### 5. Verify the Deployment
@@ -65,9 +72,13 @@ kubectl apply -f test/upf.yaml
 Check that the resources were created:
 
 ```sh
+# For UPF
 kubectl get nfdeployment test-upf
-kubectl get configmap,deployment,service | grep upf
-kubectl get pods -l app=test-upf-upf
+kubectl get configmap,deployment,service -l app=test-upf-upf
+
+# For SMF
+kubectl get nfdeployment test-smf
+kubectl get configmap,deployment,service -l app=test-smf-smf
 ```
 
 ### Production Deployment
@@ -122,6 +133,28 @@ spec:
       - prefix: 172.250.0.0/16
 ```
 
+### SMF Deployment
+
+Here's an example NFDeployment for SMF:
+
+```yaml
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: test-smf
+spec:
+  provider: sdcore
+  interfaces:
+  - name: n4
+    ipv4:
+      address: 192.168.250.4/24
+      gateway: 192.168.250.1
+  networkInstances:
+  - name: smf-network
+    interfaces:
+    - n4
+```
+
 ## Architecture
 
 ### Components
@@ -133,6 +166,10 @@ The SDCore operator consists of:
    - Creates ConfigMap with UPF configuration
    - Creates Deployment with multiple containers (BESS dataplane, PFCP agent, etc.)
    - Creates Service to expose PFCP and management interfaces
+3. **SMF Reconciler** - Handles SMF deployments:
+   - Creates ConfigMap with SMF configuration files (`smfcfg.yaml`, `uerouting.yaml`, and startup script)
+   - Creates Deployment with SMF container
+   - Creates Service to expose SBI (Service-Based Interface) and PFCP endpoints
 
 ### UPF Implementation
 
@@ -143,6 +180,16 @@ The UPF is implemented using a multi-container setup based on the OMEC BESS-UPF 
 - **Route Controller (`routectl`)** - Manages network routes for the UPF
 - **Web Interface (`web`)** - Provides a web dashboard for BESS monitoring
 
+### SMF Implementation
+
+The SMF is implemented as a single container deployment:
+
+- Based on Free5GC/SDCore SMF implementation
+- Handles session establishment, modification, and termination
+- Communicates with UPF via PFCP protocol on the N4 interface
+- Exposes Service-Based Interface (SBI) for communication with other network functions
+- Configurable via `smfcfg.yaml` for core settings and `uerouting.yaml` for UE routing policies
+
 ## Troubleshooting
 
 ### Common Issues
@@ -150,6 +197,7 @@ The UPF is implemented using a multi-container setup based on the OMEC BESS-UPF 
 1. **Pods stuck in `Init:CrashLoopBackOff`** - Check network configuration and ensure Multus is properly configured
 2. **PFCP connection failures** - Verify that the SMF can reach the UPF's N4 interface
 3. **Image pull failures** - Ensure the container registry is accessible from your cluster
+4. **SMF-UPF connectivity issues** - Check that the N4 interface addresses are configured correctly in both SMF and UPF
 
 ### Debugging
 
@@ -161,6 +209,9 @@ make run ARGS="--zap-log-level=debug"
 
 # Check operator logs
 kubectl logs -n sdcore-operator-system deployment/sdcore-operator-controller-manager
+
+# Check SMF logs
+kubectl logs -l app=test-smf-smf
 ```
 
 ## Development
@@ -170,7 +221,8 @@ kubectl logs -n sdcore-operator-system deployment/sdcore-operator-controller-man
 ```
 ├── controllers/          # Controller implementations
 │   ├── nf/               # Network function reconcilers
-│   │   └── upf/          # UPF reconciler
+│   │   ├── upf/          # UPF reconciler
+│   │   └── smf/          # SMF reconciler
 ├── test/                 # Example custom resources for testing
 └── main.go               # Main entry point
 ```

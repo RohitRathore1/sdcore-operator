@@ -16,3 +16,8 @@ func GetNamespacedName(nfDeployment *nephiov1alpha1.NFDeployment, suffix string)
 func IsProviderSDCoreUPF(provider string) bool {
 	return strings.EqualFold(provider, "upf.sdcore.io")
 }
+
+// IsProviderSDCore returns true if the provider is sdcore
+func IsProviderSDCore(provider string) bool {
+	return strings.EqualFold(provider, "sdcore") || strings.HasSuffix(strings.ToLower(provider), ".sdcore.io")
+}

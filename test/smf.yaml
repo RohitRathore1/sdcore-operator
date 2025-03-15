@@ -1,0 +1,15 @@
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: test-smf
+spec:
+  provider: sdcore
+  interfaces:
+  - name: n4
+    ipv4:
+      address: 192.168.250.4/24
+      gateway: 192.168.250.1
+  networkInstances:
+  - name: smf-network
+    interfaces:
+    - n4 

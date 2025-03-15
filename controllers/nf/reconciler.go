@@ -3,9 +3,10 @@ package nf
 import (
 	"context"
 
-	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	"github.com/RohitRathore1/sdcore-operator/controllers"
+	smf "github.com/RohitRathore1/sdcore-operator/controllers/nf/smf"
 	upf "github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
+	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -62,12 +63,25 @@ func (r *NFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Scheme: r.Scheme,
 	}
 
-	// Route to the appropriate reconciler based on the provider
-	if controllers.IsProviderSDCoreUPF(nfDeployment.Spec.Provider) {
-		upfResult, upfErr := upfReconciler.Reconcile(ctx, req)
-		return upfResult, upfErr
+	smfReconciler := &smf.SMFDeploymentReconciler{
+		Client: r.Client,
+		Scheme: r.Scheme,
 	}
 
-	log.Info("NFDeployment NOT for SDCore", "nfDeployment.Spec.Provider", nfDeployment.Spec.Provider)
+	// Route to the appropriate reconciler based on the provider
+	if controllers.IsProviderSDCoreUPF(nfDeployment.Spec.Provider) {
+		log.Info("Routing to UPF reconciler")
+		upfResult, upfErr := upfReconciler.Reconcile(ctx, req)
+		return upfResult, upfErr
+	} else if controllers.IsProviderSDCore(nfDeployment.Spec.Provider) {
+		// For SMF, we'll use the name to determine if it's an SMF deployment
+		if nfDeployment.Name == "test-smf" {
+			log.Info("Routing to SMF reconciler")
+			smfResult, smfErr := smfReconciler.Reconcile(ctx, req)
+			return smfResult, smfErr
+		}
+	}
+
+	log.Info("NFDeployment NOT for SDCore or unsupported type", "nfDeployment.Spec.Provider", nfDeployment.Spec.Provider)
 	return reconcile.Result{}, nil
 }
