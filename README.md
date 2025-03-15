@@ -16,6 +16,9 @@ Currently supports:
 - SMF (Session Management Function) with `provider: sdcore`
   - Based on Free5GC SMF implementation
   - Handles session management and communicates with UPF via PFCP
+- AMF (Access and Mobility Management Function) with `provider: sdcore`
+  - Based on Free5GC AMF implementation
+  - Handles connection and mobility management for UEs (User Equipment)
 
 ## Getting Started
 
@@ -55,9 +58,9 @@ make run
 
 This will run the operator on your local machine, connecting to the cluster configured in your current kubeconfig.
 
-#### 4. Deploy a Test UPF or SMF
+#### 4. Deploy a Test Network Function
 
-Apply the example UPF or SMF NFDeployment:
+Apply the example NFDeployment for the desired network function:
 
 ```sh
 # To deploy a UPF
@@ -65,6 +68,9 @@ kubectl apply -f test/upf.yaml
 
 # To deploy an SMF
 kubectl apply -f test/smf.yaml
+
+# To deploy an AMF
+kubectl apply -f test/amf.yaml
 ```
 
 #### 5. Verify the Deployment
@@ -79,6 +85,10 @@ kubectl get configmap,deployment,service -l app=test-upf-upf
 # For SMF
 kubectl get nfdeployment test-smf
 kubectl get configmap,deployment,service -l app=test-smf-smf
+
+# For AMF
+kubectl get nfdeployment test-amf
+kubectl get configmap,deployment,service -l app=test-amf-amf
 ```
 
 ### Production Deployment
@@ -155,6 +165,28 @@ spec:
     - n4
 ```
 
+### AMF Deployment
+
+Here's an example NFDeployment for AMF:
+
+```yaml
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: test-amf
+spec:
+  provider: sdcore
+  interfaces:
+  - name: n2
+    ipv4:
+      address: 192.168.251.5/24
+      gateway: 192.168.251.1
+  networkInstances:
+  - name: amf-network
+    interfaces:
+    - n2
+```
+
 ## Architecture
 
 ### Components
@@ -170,6 +202,11 @@ The SDCore operator consists of:
    - Creates ConfigMap with SMF configuration files (`smfcfg.yaml`, `uerouting.yaml`, and startup script)
    - Creates Deployment with SMF container
    - Creates Service to expose SBI (Service-Based Interface) and PFCP endpoints
+4. **AMF Reconciler** - Handles AMF deployments:
+   - Creates ConfigMap with AMF configuration files (`amfcfg.yaml` and startup script)
+   - Creates Deployment with AMF container
+   - Creates Service to expose NGAP (N2) and SBI endpoints
+   - Creates Headless Service for internal discovery
 
 ### UPF Implementation
 
@@ -190,6 +227,17 @@ The SMF is implemented as a single container deployment:
 - Exposes Service-Based Interface (SBI) for communication with other network functions
 - Configurable via `smfcfg.yaml` for core settings and `uerouting.yaml` for UE routing policies
 
+### AMF Implementation
+
+The AMF is implemented as a single container deployment:
+
+- Based on Free5GC/SDCore AMF implementation
+- Handles UE registration, connection management, and mobility
+- Communicates with gNBs via NGAP protocol on the N2 interface
+- Exposes Service-Based Interface (SBI) for communication with other network functions
+- Provides SCTP load balancing capabilities for RAN connections
+- Configurable via `amfcfg.yaml` with PLMN, TAI, and security settings
+
 ## Troubleshooting
 
 ### Common Issues
@@ -198,6 +246,8 @@ The SMF is implemented as a single container deployment:
 2. **PFCP connection failures** - Verify that the SMF can reach the UPF's N4 interface
 3. **Image pull failures** - Ensure the container registry is accessible from your cluster
 4. **SMF-UPF connectivity issues** - Check that the N4 interface addresses are configured correctly in both SMF and UPF
+5. **NGAP connection failures** - Verify that AMF is accessible from gNBs on the N2 interface
+6. **AMF-NRF communication failures** - Check that the NRF URI is correctly configured in the AMF configuration
 
 ### Debugging
 
@@ -212,6 +262,9 @@ kubectl logs -n sdcore-operator-system deployment/sdcore-operator-controller-man
 
 # Check SMF logs
 kubectl logs -l app=test-smf-smf
+
+# Check AMF logs
+kubectl logs -l app=test-amf-amf
 ```
 
 ## Development
@@ -222,7 +275,8 @@ kubectl logs -l app=test-smf-smf
 ├── controllers/          # Controller implementations
 │   ├── nf/               # Network function reconcilers
 │   │   ├── upf/          # UPF reconciler
-│   │   └── smf/          # SMF reconciler
+│   │   ├── smf/          # SMF reconciler
+│   │   └── amf/          # AMF reconciler
 ├── test/                 # Example custom resources for testing
 └── main.go               # Main entry point
 ```

@@ -1,0 +1,15 @@
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: test-amf
+spec:
+  provider: sdcore
+  interfaces:
+  - name: n2
+    ipv4:
+      address: 192.168.251.5/24
+      gateway: 192.168.251.1
+  networkInstances:
+  - name: amf-network
+    interfaces:
+    - n2 

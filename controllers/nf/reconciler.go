@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/RohitRathore1/sdcore-operator/controllers"
+	amf "github.com/RohitRathore1/sdcore-operator/controllers/nf/amf"
 	smf "github.com/RohitRathore1/sdcore-operator/controllers/nf/smf"
 	upf "github.com/RohitRathore1/sdcore-operator/controllers/nf/upf"
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
@@ -68,6 +69,11 @@ func (r *NFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Scheme: r.Scheme,
 	}
 
+	amfReconciler := &amf.AMFDeploymentReconciler{
+		Client: r.Client,
+		Scheme: r.Scheme,
+	}
+
 	// Route to the appropriate reconciler based on the provider
 	if controllers.IsProviderSDCoreUPF(nfDeployment.Spec.Provider) {
 		log.Info("Routing to UPF reconciler")
@@ -79,6 +85,10 @@ func (r *NFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.Info("Routing to SMF reconciler")
 			smfResult, smfErr := smfReconciler.Reconcile(ctx, req)
 			return smfResult, smfErr
+		} else if nfDeployment.Name == "test-amf" {
+			log.Info("Routing to AMF reconciler")
+			amfResult, amfErr := amfReconciler.Reconcile(ctx, req)
+			return amfResult, amfErr
 		}
 	}
 
