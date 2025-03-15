@@ -1,19 +1,3 @@
-/*
-Copyright 2024 The Nephio Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package amf
 
 import (
@@ -45,16 +29,16 @@ const (
 	amfServiceName = "amf-service"
 
 	// AMF port names
-	amfNgappPortName   = "ngapp"
-	amfSbiPortName     = "sbi"
+	amfNgappPortName    = "ngapp"
+	amfSbiPortName      = "sbi"
 	amfSctpGrpcPortName = "sctp-grpc"
-	amfPromPortName    = "prometheus"
+	amfPromPortName     = "prometheus"
 
 	// AMF port numbers
-	amfNgappPort   = 38412
-	amfSbiPort     = 8080
+	amfNgappPort    = 38412
+	amfSbiPort      = 8080
 	amfSctpGrpcPort = 9000
-	amfPromPort    = 9089
+	amfPromPort     = 9089
 )
 
 // reconcileConfigMap reconciles the ConfigMap for the AMF
@@ -193,7 +177,7 @@ func reconcileDeployment(ctx context.Context, c client.Client, scheme *runtime.S
 									Value: "DEBUG",
 								},
 								{
-									Name:  "POD_IP",
+									Name: "POD_IP",
 									ValueFrom: &apiv1.EnvVarSource{
 										FieldRef: &apiv1.ObjectFieldSelector{
 											FieldPath: "status.podIP",
@@ -325,9 +309,9 @@ func reconcileService(ctx context.Context, c client.Client, scheme *runtime.Sche
 			},
 			Ports: []apiv1.ServicePort{
 				{
-					Name:       "grpc",
-					Port:       9000,
-					Protocol:   apiv1.ProtocolTCP,
+					Name:     "grpc",
+					Port:     9000,
+					Protocol: apiv1.ProtocolTCP,
 				},
 			},
 		},
@@ -532,4 +516,4 @@ configuration:
   t3512: 3600
   non3gppDeregistrationTimer: 3240
 `, n2Address, n2Address)
-} 
+}

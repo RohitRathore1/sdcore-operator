@@ -281,7 +281,7 @@ func configureDeploymentSpec(deployment *appsv1.Deployment, nfDeployment *nephio
 				},
 			},
 			Command: []string{"/opt/bess/bessctl/conf/route_control.py"},
-			Args:    []string{"-i", "access", "core"},
+			Args:    []string{"-i", "eth0", "eth0"},
 			Resources: apiv1.ResourceRequirements{
 				Requests: apiv1.ResourceList{
 					apiv1.ResourceCPU:    resource.MustParse("256m"),
@@ -363,7 +363,7 @@ func generateUPFConfig(nfDeployment *nephiov1alpha1.NFDeployment) string {
 	// This is a simplified configuration based on the BESS-UPF Helm chart
 	// In a real implementation, this would parse the NFDeployment spec more thoroughly
 
-	// Using direct configuration from BESS-UPF's values.yaml
+	// Modified configuration for local testing that doesn't rely on network interfaces
 	return `{
   "mode": "af_packet",
   "log_level": "info",
@@ -376,10 +376,10 @@ func generateUPFConfig(nfDeployment *nephiov1alpha1.NFDeployment) string {
     "farLookup": 150000
   },
   "access": {
-    "ifname": "access"
+    "ifname": "eth0"
   },
   "core": {
-    "ifname": "core"
+    "ifname": "eth0"
   },
   "measure_upf": true,
   "measure_flow": false,
