@@ -1,160 +1,176 @@
 # SDCore Operator
 
-A Kubernetes operator for managing SD-Core 5G network functions. This operator enables declarative deployment and management of 5G network functions including UPF, AMF, SMF, NRF, and more.
+A Kubernetes operator for bess-upf based on the Nephio NFDeployment API.
 
-## Overview
+## Description
 
-The SDCore Operator watches for NFDeployment custom resources and creates the necessary Kubernetes resources (Deployments, ConfigMaps, Services) to run SD-Core network functions. It's designed to be lightweight and efficient, using direct Kubernetes API calls rather than complex controller-runtime abstractions.
+SDCore Operator manages deployments of SDCore's network functions by reconciling Nephio's
+`NFDeployment` custom resources. The operator creates and maintains the necessary Kubernetes resources
+(Deployments, ConfigMaps, Services) according to the specifications in the NFDeployment objects.
 
-## Supported Network Functions
+Currently supports:
 
-The operator supports the following SD-Core network functions:
+- UPF (User Plane Function) with `provider: upf.sdcore.io`
+  - Based on BESS-UPF implementation from the sdcore-helm-charts
+  - Multi-container architecture with BESS dataplane and PFCP control plane
 
-- UPF (User Plane Function)
-- AMF (Access and Mobility Management Function)
-- SMF (Session Management Function)
-- NRF (Network Repository Function)
-- PCF (Policy Control Function)
-- UDM (Unified Data Management)
-- UDR (Unified Data Repository)
-- AUSF (Authentication Server Function)
-- NSSF (Network Slice Selection Function)
+## Getting Started
 
-## Prerequisites
+### Prerequisites
 
-- Kubernetes cluster (v1.20+)
-- `kubectl` command-line tool
-- Docker (for building and loading images)
-- Kind cluster (for local testing)
+- Kubernetes cluster (v1.23+)
+- kubectl CLI tool
+- Multus CNI plugin for multi-interface support (for production deployments)
+- Nephio NFDeployment CRD installed
 
-## Installation
+### Quick Start Guide
 
-### Using the provided script
+#### 1. Install Nephio CRDs
 
-```bash
-chmod +x build-and-deploy.sh
-./build-and-deploy.sh
+First, install the required Nephio Custom Resource Definitions:
+
+```sh
+kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/main/config/crd/bases/workload.nephio.org_nfdeployments.yaml
+kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/main/config/crd/bases/workload.nephio.org_nfconfigs.yaml
+kubectl apply -f https://raw.githubusercontent.com/nephio-project/api/main/config/crd/bases/ref.nephio.org_configs.yaml
 ```
 
-This script will:
-1. Build the operator Docker image
-2. Load it into your Kind cluster
-3. Apply the CRD
-4. Create the operator namespace
-5. Deploy the operator
+#### 2. Clone and Navigate to the Repository
 
-### Manual installation
-
-1. Build the operator image:
-   ```bash
-   docker build -t sdcore-operator:latest -f Dockerfile.simple .
-   ```
-
-2. Load the image into your Kind cluster:
-   ```bash
-   kind load docker-image sdcore-operator:latest
-   ```
-
-3. Apply the CRD:
-   ```bash
-   kubectl apply -f config/crd/nfdeployment.yaml
-   ```
-
-4. Create the operator namespace:
-   ```bash
-   kubectl create namespace sdcore-system
-   ```
-
-5. Deploy the operator:
-   ```bash
-   kubectl apply -f config/deployment/operator.yaml
-   ```
-
-## Usage
-
-### Create Network Function Deployments
-
-After installing the operator, you can create network function deployments using the provided sample YAML files:
-
-```bash
-# Deploy the NRF (should be deployed first as other NFs depend on it)
-kubectl apply -f test/nrf_deployment.yaml
-
-# Deploy the AMF
-kubectl apply -f test/amf_deployment.yaml
-
-# Deploy the UPF
-kubectl apply -f test/upf_deployment.yaml
+```sh
+git clone https://github.com/RohitRathore1/sdcore-operator.git
+cd sdcore-operator
 ```
 
-### Customizing Network Function Deployments
+#### 3. Run the Operator Locally (Development Mode)
 
-You can customize the network function deployments by editing the YAML files or creating new ones. Each NFDeployment resource supports the following fields:
+For testing and development, you can run the operator locally:
 
-- `provider`: Specifies the network function provider (e.g., `upf.sdcore.io`, `amf.sdcore.io`)
-- `interfaces`: Network interfaces configuration
-- `parameterValues`: Configuration parameters for the network function
-- `replicas`: Number of replicas for the deployment
-- `monitoringEnabled`: Whether monitoring is enabled
-- `upstreamNFs`: List of upstream network functions that this NF depends on
+```sh
+make run
+```
 
-Example:
+This will run the operator on your local machine, connecting to the cluster configured in your current kubeconfig.
+
+#### 4. Deploy a Test UPF
+
+Apply the example UPF NFDeployment:
+
+```sh
+kubectl apply -f test/upf.yaml
+```
+
+#### 5. Verify the Deployment
+
+Check that the resources were created:
+
+```sh
+kubectl get nfdeployment test-upf
+kubectl get configmap,deployment,service | grep upf
+kubectl get pods -l app=test-upf-upf
+```
+
+### Production Deployment
+
+For production use, build and deploy the operator as a container:
+
+#### 1. Build and Push the Operator Image
+
+```sh
+make docker-build docker-push IMG=<your-registry>/sdcore-operator:v0.1.0
+```
+
+#### 2. Deploy the Operator to the Cluster
+
+```sh
+make deploy IMG=<your-registry>/sdcore-operator:v0.1.0
+```
+
+## NFDeployment Examples
+
+### UPF Deployment
+
+Here's an example NFDeployment for UPF:
 
 ```yaml
 apiVersion: workload.nephio.org/v1alpha1
 kind: NFDeployment
 metadata:
   name: example-upf
-  namespace: default
 spec:
   provider: upf.sdcore.io
   interfaces:
-    - name: n3
-      ipv4:
-        address: 172.16.10.2/24
-        gateway: 172.16.10.1
-  parameterValues:
-    - name: capacity
-      value: small
-    - name: dns
-      value: 8.8.8.8
-  replicas: 1
-  monitoringEnabled: true
+  - name: n3
+    ipv4:
+      address: 192.168.252.3/24
+      gateway: 192.168.252.1
+  - name: n4
+    ipv4:
+      address: 192.168.250.3/24
+      gateway: 192.168.250.1
+  - name: n6
+    ipv4:
+      address: 192.168.249.3/24
+      gateway: 192.168.249.1
+  networkInstances:
+  - name: data-network
+    interfaces:
+    - n6
+    dataNetworks:
+    - name: internet
+      pool:
+      - prefix: 172.250.0.0/16
+```
+
+## Architecture
+
+### Components
+
+The SDCore operator consists of:
+
+1. **Main Controller** - Routes NFDeployment resources to specific network function reconcilers based on the `provider` field
+2. **UPF Reconciler** - Handles UPF deployments using a BESS-based implementation:
+   - Creates ConfigMap with UPF configuration
+   - Creates Deployment with multiple containers (BESS dataplane, PFCP agent, etc.)
+   - Creates Service to expose PFCP and management interfaces
+
+### UPF Implementation
+
+The UPF is implemented using a multi-container setup based on the OMEC BESS-UPF architecture:
+
+- **BESS Dataplane (`bessd`)** - High-performance software dataplane using Berkeley Extensible Software Switch
+- **PFCP Agent (`pfcp-agent`)** - Control plane component that handles PFCP signaling with SMF
+- **Route Controller (`routectl`)** - Manages network routes for the UPF
+- **Web Interface (`web`)** - Provides a web dashboard for BESS monitoring
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Pods stuck in `Init:CrashLoopBackOff`** - Check network configuration and ensure Multus is properly configured
+2. **PFCP connection failures** - Verify that the SMF can reach the UPF's N4 interface
+3. **Image pull failures** - Ensure the container registry is accessible from your cluster
+
+### Debugging
+
+To debug the operator:
+
+```sh
+# Run with increased verbosity
+make run ARGS="--zap-log-level=debug"
+
+# Check operator logs
+kubectl logs -n sdcore-operator-system deployment/sdcore-operator-controller-manager
 ```
 
 ## Development
 
-### Architecture
+### Project Structure
 
-The operator uses a simple reconciliation loop to watch for NFDeployment resources and create the necessary Kubernetes resources. It directly uses the Kubernetes client-go libraries to interact with the API server, rather than using the more complex controller-runtime libraries.
-
-The main components are:
-- A dynamic client that watches for NFDeployment resources
-- Switch statement to handle different network function types
-- Resource creation functions for each network function
-
-### Adding a new Network Function
-
-To add support for a new network function:
-
-1. Add a new constant for the image in `simple-operator.go`
-2. Add a new case in the switch statement in the main loop
-3. Implement the processing function for the new network function
-4. Create helper functions for ConfigMap, Deployment, and Service creation
-
-### Building and Testing
-
-```bash
-# Build the operator
-go build -o sdcore-operator simple-operator.go
-
-# Run locally (for development)
-./sdcore-operator
-
-# Build the Docker image
-docker build -t sdcore-operator:latest -f Dockerfile.simple .
 ```
-
-## License
-
-MIT
+├── controllers/          # Controller implementations
+│   ├── nf/               # Network function reconcilers
+│   │   └── upf/          # UPF reconciler
+├── test/                 # Example custom resources for testing
+└── main.go               # Main entry point
+```

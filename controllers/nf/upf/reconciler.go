@@ -1,19 +1,3 @@
-/*
-Copyright 2024 The Nephio Authors.
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 package upf
 
 import (
@@ -23,15 +7,12 @@ import (
 	nephiov1alpha1 "github.com/nephio-project/api/nf_deployments/v1alpha1"
 	"github.com/RohitRathore1/sdcore-operator/controllers"
 	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -44,169 +25,74 @@ type UPFDeploymentReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *UPFDeploymentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("NFDeployment", req.NamespacedName, "NF", "UPF")
+	log := log.FromContext(ctx).WithValues("UPFDeployment", req.NamespacedName)
 
+	// Get the NFDeployment resource
 	nfDeployment := new(nephiov1alpha1.NFDeployment)
 	err := r.Client.Get(ctx, req.NamespacedName, nfDeployment)
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			log.Info("UPF NFDeployment resource not found, ignoring because object must be deleted")
+			log.Info("NFDeployment resource not found, ignoring because object must be deleted")
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Failed to get UPF NFDeployment")
+		log.Error(err, "Failed to get NFDeployment")
 		return reconcile.Result{}, err
 	}
 
-	// Get capacity value using helper
-	capacityValue, err := controllers.GetCapacitySize(nfDeployment)
-	if err != nil {
-		log.Info("Capacity parameter not found, using default small")
-		capacityValue = "small"
-	}
-	log.Info("Using capacity", "value", capacityValue)
-
-	// Get DNS value using helper
-	dnsValue, err := controllers.GetDNSIP(nfDeployment)
-	if err != nil {
-		log.Info("DNS parameter not found, using default 8.8.8.8")
-		dnsValue = "8.8.8.8"
-	}
-	log.Info("Using DNS", "value", dnsValue)
-
-	namespace := nfDeployment.Namespace
-
-	configMapFound := false
-	configMapName := nfDeployment.Name
-	var configMapVersion string
-	currentConfigMap := new(apiv1.ConfigMap)
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, currentConfigMap); err == nil {
-		configMapFound = true
-		configMapVersion = currentConfigMap.ResourceVersion
-	}
-
-	deploymentFound := false
-	deploymentName := nfDeployment.Name
-	currentDeployment := new(appsv1.Deployment)
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: namespace}, currentDeployment); err == nil {
-		deploymentFound = true
-	}
-
-	// If deployment exists, check if we need to update the status
-	if deploymentFound {
-		// This variable is just a placeholder for future implementation
-		// TODO: implement status update logic using the deep copy
-		// deployment := currentDeployment.DeepCopy()
-
-		// If configMap was updated, we should update the deployment to trigger a rolling update
-		if currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] != configMapVersion {
-			log.Info("ConfigMap has been updated, rolling Deployment pods", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
-			currentDeployment.Spec.Template.Annotations[controllers.ConfigMapVersionAnnotation] = configMapVersion
-
-			if err := r.Update(ctx, currentDeployment); err != nil {
-				log.Error(err, "Failed to update Deployment", "Deployment.namespace", currentDeployment.Namespace, "Deployment.name", currentDeployment.Name)
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		}
-
+	// Verify that this is a UPF deployment
+	if !controllers.IsProviderSDCoreUPF(nfDeployment.Spec.Provider) {
+		log.Info("NFDeployment is not for SDCore UPF, ignoring",
+			"Provider", nfDeployment.Spec.Provider)
 		return reconcile.Result{}, nil
 	}
 
-	// Create or update configMap if needed
-	if !configMapFound {
-		configMap, err := createConfigMap(log, nfDeployment, capacityValue, dnsValue)
-		if err != nil {
-			log.Error(err, "Failed to create ConfigMap")
-			return reconcile.Result{}, err
-		}
-
-		if err := r.Create(ctx, configMap); err != nil {
-			log.Error(err, "Failed to create ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "ConfigMap.Name", configMap.Name)
-			return reconcile.Result{}, err
-		}
-		configMapVersion = configMap.ResourceVersion
-		log.Info("Created ConfigMap", "ConfigMap.Namespace", configMap.Namespace, "ConfigMap.Name", configMap.Name)
+	// Create or update ConfigMap
+	if err := r.reconcileConfigMap(ctx, nfDeployment); err != nil {
+		log.Error(err, "Failed to reconcile ConfigMap")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// Create deployment if it doesn't exist
-	if !deploymentFound {
-		// Create the deployment
-		deployment, err := createDeployment(log, configMapVersion, nfDeployment)
-		if err != nil {
-			log.Error(err, "Failed to create Deployment")
-			return reconcile.Result{}, err
-		}
-
-		// Update resource requirements based on capacity
-		if deployment.Spec.Template.Spec.Containers != nil && len(deployment.Spec.Template.Spec.Containers) > 0 {
-			mainContainer := &deployment.Spec.Template.Spec.Containers[0]
-			
-			// Set resources based on capacity value
-			switch capacityValue {
-			case "medium":
-				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("1000m")
-				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("1Gi")
-				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("2000m")
-				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("2Gi")
-			case "large":
-				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("2000m")
-				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("2Gi")
-				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("4000m")
-				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("4Gi")
-			default: // small or any other value
-				mainContainer.Resources.Requests[apiv1.ResourceCPU] = resource.MustParse("500m")
-				mainContainer.Resources.Requests[apiv1.ResourceMemory] = resource.MustParse("512Mi")
-				mainContainer.Resources.Limits[apiv1.ResourceCPU] = resource.MustParse("1000m")
-				mainContainer.Resources.Limits[apiv1.ResourceMemory] = resource.MustParse("1Gi")
-			}
-		}
-
-		if err := ctrl.SetControllerReference(nfDeployment, deployment, r.Scheme); err != nil {
-			log.Error(err, "Failed to set controller reference for Deployment")
-			return reconcile.Result{}, err
-		}
-
-		if err := r.Create(ctx, deployment); err != nil {
-			log.Error(err, "Failed to create Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
-			return reconcile.Result{}, err
-		}
-		log.Info("Created Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+	// Create or update Deployment
+	if err := r.reconcileDeployment(ctx, nfDeployment); err != nil {
+		log.Error(err, "Failed to reconcile Deployment")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	// Create service if needed
-	serviceName := nfDeployment.Name
-	currentService := new(apiv1.Service)
-	serviceFound := false
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: serviceName, Namespace: namespace}, currentService); err == nil {
-		serviceFound = true
+	// Create or update Service
+	if err := r.reconcileService(ctx, nfDeployment); err != nil {
+		log.Error(err, "Failed to reconcile Service")
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 	}
 
-	if !serviceFound {
-		service, err := createService(log, nfDeployment)
-		if err != nil {
-			log.Error(err, "Failed to create Service")
-			return reconcile.Result{}, err
+	// Update status
+	upfDeployment, err := r.getDeployment(ctx, nfDeployment)
+	if err != nil {
+		if !k8serrors.IsNotFound(err) {
+			log.Error(err, "Failed to get Deployment")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 		}
-
-		if err := ctrl.SetControllerReference(nfDeployment, service, r.Scheme); err != nil {
-			log.Error(err, "Failed to set controller reference for Service")
-			return reconcile.Result{}, err
-		}
-
-		if err := r.Create(ctx, service); err != nil {
-			log.Error(err, "Failed to create Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
-			return reconcile.Result{}, err
-		}
-		log.Info("Created Service", "Service.Namespace", service.Namespace, "Service.Name", service.Name)
+		// Deployment not found yet, requeue
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	return reconcile.Result{}, nil
+	status, changed := createNfDeploymentStatus(upfDeployment, nfDeployment)
+	if changed {
+		nfDeployment.Status = status
+		if err := r.Status().Update(ctx, nfDeployment); err != nil {
+			log.Error(err, "Failed to update NFDeployment status")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+	}
+
+	return ctrl.Result{}, nil
 }
 
-// SetupWithManager sets up the controller with the Manager and optional predicates.
-func (r *UPFDeploymentReconciler) SetupWithManager(mgr ctrl.Manager, predicates ...predicate.Predicate) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&nephiov1alpha1.NFDeployment{}).
-		WithEventFilter(predicate.And(predicates...)).
-		Complete(r)
-} 
+// getDeployment gets the UPF deployment for the NFDeployment
+func (r *UPFDeploymentReconciler) getDeployment(ctx context.Context, nfDeployment *nephiov1alpha1.NFDeployment) (*appsv1.Deployment, error) {
+	deployment := new(appsv1.Deployment)
+	err := r.Client.Get(ctx, types.NamespacedName{
+		Namespace: nfDeployment.Namespace,
+		Name:      controllers.GetNamespacedName(nfDeployment, "upf"),
+	}, deployment)
+	return deployment, err
+}

@@ -3,7 +3,6 @@ module github.com/RohitRathore1/sdcore-operator
 go 1.20
 
 require (
-	github.com/go-logr/logr v1.2.4
 	github.com/nephio-project/api v1.0.1-0.20231006162045-9ad2d0db2a8d
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
@@ -18,6 +17,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/zapr v1.2.4 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect

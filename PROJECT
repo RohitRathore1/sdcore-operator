@@ -6,7 +6,7 @@ domain: nephio.org
 layout:
 - go.kubebuilder.io/v3
 projectName: sdcore-operator
-repo: github.com/nephio-project/sdcore
+repo: github.com/RohitRathore1/sdcore-operator
 resources:
 - api:
     crdVersion: v1
@@ -14,7 +14,7 @@ resources:
   controller: true
   domain: nephio.org
   group: workload
-  kind: NFDeployment
+  kind: UPFDeployment
   path: github.com/nephio-project/api/nf_deployments/v1alpha1
   version: v1alpha1
-version: "3"
+version: "3" 
