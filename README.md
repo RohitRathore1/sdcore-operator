@@ -238,6 +238,60 @@ The AMF is implemented as a single container deployment:
 - Provides SCTP load balancing capabilities for RAN connections
 - Configurable via `amfcfg.yaml` with PLMN, TAI, and security settings
 
+## Network Repository Function (NRF) Controller
+
+The NRF controller has been implemented to manage the Network Repository Function component of the 5G core network. The NRF is a critical component that provides service discovery functionality, allowing other components to register themselves and discover other network functions.
+
+### Implementation Details
+
+The NRF controller:
+
+1. Creates and manages a ConfigMap with NRF configuration
+2. Deploys the NRF container using the image `omecproject/5gc-nrf:rel-1.6.3`
+3. Creates a Service for other components to access the NRF
+4. Updates the status of the NFDeployment based on the readiness of the NRF deployment
+
+### Testing
+
+To test the NRF controller, apply the test NFDeployment:
+
+```bash
+kubectl apply -f test/nrf.yaml
+```
+
+This will create an NFDeployment that the operator will reconcile by creating the necessary ConfigMap, Deployment, and Service for the NRF component.
+
+### Access
+
+Other components in the 5G core network can access the NRF via:
+
+```
+http://test-nrf-nrf-service:8080
+```
+
+The NRF exposes the following service interfaces:
+- nnrf-nfm (NF management)
+- nnrf-disc (NF discovery)
+
+### Role in 5G Core Architecture
+
+The Network Repository Function (NRF) plays a central role in the 5G Core network:
+
+1. **Service Registration**: All Network Functions (NFs) like AMF, SMF, and UPF register their capabilities and services with the NRF.
+2. **Service Discovery**: When an NF needs to communicate with another, it queries the NRF to discover the available instances and their capabilities.
+3. **Load Balancing**: The NRF can assist in load balancing by directing NFs to appropriate service instances.
+4. **NFProfile Management**: Maintains profiles of all registered NFs, including their services, addresses, and capabilities.
+
+### Integration with Other Components
+
+In the sdcore-operator implementation:
+
+1. **AMF Integration**: The AMF configuration points to the NRF service for registration and discovering other required services.
+2. **SMF Integration**: The SMF uses the NRF to register itself and discover the UPF instances it needs to manage.
+3. **Centralized Configuration**: The NRF provides a single point of configuration for service endpoints, eliminating the need to hardcode service addresses in each component.
+
+When deploying a complete 5G core with the sdcore-operator, you should deploy the NRF first, followed by other components to ensure proper service registration and discovery.
+
 ## Troubleshooting
 
 ### Common Issues
